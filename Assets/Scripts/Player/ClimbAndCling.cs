@@ -20,18 +20,37 @@ public class ClimbAndCling : MonoBehaviour
 
     private IEnumerator ClingReset;
 
+    [Header("WallRun Info")]
+    private bool IsWallRunning;
+    private bool WallRunDirRight; //True == Right, False == Left 
+    private bool canWallRunRight;
+    private bool canWallRunLeft;
+    public float WallRunTime;
+    public float minWallRunSpeed;
+    public float wallRunCharAngle;
+    private float CharStartAngle;
+
     [Header("PlayerInfo")]
     public PlayerMovement Mover;
     public Transform orientation;
     public Rigidbody rb;
 
-    
+    [Header("DebugOptions")]
+    public bool debugMode;
+    public float WallRunRadius;
+    public float WallRunMaxDistance;
+    public float ClingRadius;
+    public float ClingMaxDistance;
+    public float KickOffRadius;
+    public float KickOffMaxDistance;
 
     // Start is called before the first frame update
     void Start()
     {
-        ClingReset = StopCling();
+        ClingReset = StopCling(0f);
         canCling = true;
+        canWallRunLeft = true;
+        canWallRunRight = true;
         Debounce = false;
     }
 
@@ -59,6 +78,16 @@ public class ClimbAndCling : MonoBehaviour
         {
             KickOff();
         }
+        else if (Input.GetKey(Mover.jumpKey) && (Mover.state == PlayerMovement.MovementState.walking || Mover.state == PlayerMovement.MovementState.clinging) && !Mover.GetGrounded() && ReadyToWallRun(true) && !Debounce)
+        {
+            WallRun(true);
+        }
+        //Check for wall run to the left
+        else if (Input.GetKey(Mover.jumpKey) && (Mover.state == PlayerMovement.MovementState.walking || Mover.state == PlayerMovement.MovementState.clinging) && !Mover.GetGrounded() && ReadyToWallRun(false) && !Debounce)
+        {
+            print("wallRunLeft");
+            WallRun(false);
+        }
 
         if (Mover.state == PlayerMovement.MovementState.clinging)
         {
@@ -68,10 +97,28 @@ public class ClimbAndCling : MonoBehaviour
         {
             rb.velocity = new Vector3(0, 3, 0);
         }
+        else if (IsWallRunning)
+        {
+            rb.velocity = new Vector3(rb.velocity.x, -0.5f, rb.velocity.z);
+            //check if the user has no wall in their wallrun direction
+            if ((WallRunDirRight && !Physics.SphereCast(orientation.position, 0.4f, orientation.right, out RaycastHit hitinfo, 0.5f, WhatIsWall)) || (!WallRunDirRight && !Physics.SphereCast(orientation.position, 0.4f, orientation.right * -1, out RaycastHit hitinfo2, 0.5f, WhatIsWall)))
+            {
+                print("stopped");
+                CancelInvoke();
+                StopWallRun();
+            }
+        }
 
+        //Cooldown Resets//
         if (Mover.GetGrounded() && !canCling)
         {
+            StartCoroutine(StopCling(2.3f));
             Invoke(nameof(ResetCooldown), ClingCooldown);
+        }
+        if (Mover.GetGrounded())
+        {
+            canWallRunLeft = true;
+            canWallRunRight = true;
         }
     }
 
@@ -102,6 +149,35 @@ public class ClimbAndCling : MonoBehaviour
         Invoke(nameof(StopClimb), climbTime);
     }
 
+    private void WallRun(bool IsRight)
+    {
+        canCling = false;
+        IsWallRunning = true;
+        rb.useGravity = false;
+        canWallRunRight = false;
+        canWallRunLeft = false;
+
+        if (Mover.state == PlayerMovement.MovementState.clinging)
+        {
+            Mover.state = PlayerMovement.MovementState.air;
+            StopCoroutine(ClingReset);
+        }
+
+        if (IsRight)
+        {
+            print("wallRunRight");
+            WallRunDirRight = true;
+        }
+        else
+        {
+            print("wallRunLeft");
+            WallRunDirRight = false;
+        }
+
+        Invoke(nameof(StopWallRun), WallRunTime);
+    }
+
+
     private void StopClimb()
     {
         Mover.state = PlayerMovement.MovementState.air;
@@ -109,14 +185,34 @@ public class ClimbAndCling : MonoBehaviour
         Invoke(nameof(ResetCooldown), ClingCooldown);
     }
 
-    private IEnumerator StopCling()
+    private IEnumerator StopCling(float t)
     {
-        yield return new WaitForSeconds(3);
+        yield return new WaitForSeconds(t);
         print("clingEnded");
         Mover.state = PlayerMovement.MovementState.air;
         Mover.SetMoveSpeed(1);
 
  }
+
+    private void StopWallRun()
+    {
+        //push player down//
+        rb.AddForce(orientation.up * -1 * 20, ForceMode.Force);
+        rb.useGravity = true;
+        IsWallRunning = false;
+        if (WallRunDirRight)
+        {
+            canWallRunLeft = true;
+            Invoke(nameof(ResetWallRunCooldownRight), 0.5f);
+
+        }
+        else
+        {
+            canWallRunRight = true;
+            Invoke(nameof(ResetWallRunCooldownLeft), 0.5f);
+
+        }
+    }
 
     public void ResetCooldown()
     {
@@ -129,8 +225,50 @@ public class ClimbAndCling : MonoBehaviour
         Debounce = false;
     }
 
+    public void ResetWallRunCooldownRight()
+    {
+        canWallRunRight = true;
+    }
+
+    public void ResetWallRunCooldownLeft()
+    {
+        canWallRunLeft = true;
+    }
+
     public bool ReadyToCling()
     {
         return Physics.SphereCast(transform.position, 0, orientation.forward, out RaycastHit hitInfo, 1, WhatIsWall) && Mover.state != PlayerMovement.MovementState.clinging;
+    }
+
+    public bool ReadyToWallRun(bool toRight)
+    {
+        if (toRight)
+        {
+            //print(canWallRun && Mover.GetMoveSpeed() >= minWallRunSpeed && Physics.SphereCast(orientation.position, 0.4f, orientation.right, out RaycastHit hitinfotest, 0.5f, WhatIsWall));
+            WallRunDirRight = true;
+            return canWallRunRight && Mover.GetMoveSpeed() >= minWallRunSpeed && Physics.SphereCast(orientation.position, 0.4f, orientation.right, out RaycastHit hitinfo, 0.5f, WhatIsWall);
+        }
+        else
+        {
+            //print(canWallRun && Mover.GetMoveSpeed() >= minWallRunSpeed && Physics.SphereCast(orientation.position, 0.4f, orientation.right * -1, out RaycastHit hitinfotest, 0.5f, WhatIsWall));
+            WallRunDirRight = false;
+            return canWallRunLeft && Mover.GetMoveSpeed() >= minWallRunSpeed && Physics.SphereCast(orientation.position, 0.4f, orientation.right * -1, out RaycastHit hitinfo, 0.5f, WhatIsWall);
+        }
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (debugMode)
+        {
+            Gizmos.color = Color.red;
+            //Wall Run Checks
+            Gizmos.DrawSphere(orientation.position + orientation.right * WallRunMaxDistance * -1, WallRunRadius);
+            Gizmos.DrawSphere(orientation.position + orientation.right * WallRunMaxDistance, WallRunRadius);
+            //Climb&ClingCheck
+            Gizmos.DrawSphere(orientation.position + orientation.forward * ClingMaxDistance, ClingRadius);
+            //KickOffCheck//
+            Gizmos.DrawSphere(orientation.position + orientation.forward * KickOffMaxDistance * -1, KickOffRadius);
+
+        }
     }
 }

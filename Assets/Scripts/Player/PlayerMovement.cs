@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Net.Security;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -122,7 +123,6 @@ public class PlayerMovement : MonoBehaviour
         SpeedControl();
         StateHandler();
         VelocityUpdate();
-        UpdateUI();
 
         // Testing things
         /*
@@ -266,7 +266,7 @@ public class PlayerMovement : MonoBehaviour
         }
 
         // Mode - Sprinting
-        if (grounded && Input.GetKey(sprintKey) && moveSpeed == walkSpeed)
+        if (grounded && Input.GetKey(sprintKey) && moveSpeed >= walkSpeed)
         {
             state = MovementState.sprinting;
             moveSpeed = sprintSpeed;
@@ -298,6 +298,7 @@ public class PlayerMovement : MonoBehaviour
         else if (grounded)
         {
             moveSpeed = 1;
+                walkAcceleration = 1;
             state = MovementState.idle;
         }
 
@@ -469,15 +470,6 @@ public class PlayerMovement : MonoBehaviour
     {
         return Vector3.ProjectOnPlane(moveDirection, slopeHit.normal).normalized;
     }
-
-    private void UpdateUI()
-    {
-        GameObject speedText = GameObject.Find("SpeedTxt");
-        speedText.gameObject.GetComponent<Text>().text = "Speed: " + moveSpeed;
-        GameObject jumpText = GameObject.Find("JumpTxt");
-        jumpText.gameObject.GetComponent<Text>().text = "Jump: " + jumpForceAtTime;
-    }
-
     private void VelocityUpdate()
     {
         jumpForceAtTime = jumpForce * (moveSpeed / sprintSpeed) + 5;
@@ -487,10 +479,22 @@ public class PlayerMovement : MonoBehaviour
         {
             TimeCount++;
             //print(TimeCount);
-            if (TimeCount >= 150)
+            if (TimeCount >= 25)
             {
                 TimeCount = 0;
                 moveSpeed += walkAcceleration;
+                if (moveSpeed >= walkSpeed / 1.1f && walkAcceleration >= 0.5f)
+                {
+                    walkAcceleration /= 1.75f;
+                }
+                else if (moveSpeed >= walkSpeed / 2 && walkAcceleration >= 0.75f)
+                {
+                    walkAcceleration /= 1.5f;
+                }
+                else if (moveSpeed >= walkSpeed / 4 && walkAcceleration >= 1)
+                {
+                    walkAcceleration /= 1.25f;
+                }
                 if (moveSpeed >= walkSpeed)
                 {
                     moveSpeed = walkSpeed;
